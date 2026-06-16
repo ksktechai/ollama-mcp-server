@@ -1,0 +1,56 @@
+@startuml architecture
+title <b>ollama-mcp-server — MCP → Ollama bridge</b>
+
+skinparam shadowing false
+skinparam roundCorner 12
+skinparam defaultFontName Helvetica
+skinparam ArrowColor #283593
+skinparam ArrowThickness 1.6
+skinparam rectangle {
+  BorderThickness 2
+  FontStyle bold
+}
+skinparam component {
+  BorderThickness 2
+  FontStyle bold
+}
+
+actor "MCP client\n(Postman / Claude\nDesktop / Cline)" as Client #ECEFF1
+
+package "Dev laptop — ollama-mcp-server (Quarkus, :8085)" {
+
+  rectangle "MCP HTTP transport" as TRANSPORT #dae8fc {
+    component "quarkus-mcp-server-http\nStreamable HTTP  /mcp\nlegacy HTTP/SSE   /mcp/sse" as MCP #dae8fc
+  }
+
+  rectangle "Tools" as TOOLS #e1d5e7 {
+    component "OllamaTools  @Tool x6\nollama_list · ollama_show · ollama_ps\nollama_generate · ollama_chat · ollama_embed\n[@Logged  >>> / <<<  correlationId]" as TOOL #e1d5e7
+  }
+
+  rectangle "Service" as SERVICE #d0e0e3 {
+    component "OllamaService\ndefault-model fallback · build DTOs\nparse safely → readable error JSON\n(never 500 the caller)" as SVC #d0e0e3
+  }
+
+  rectangle "Ollama REST client" as CLIENT #d5e8d4 {
+    component "OllamaClient  @RegisterRestClient\nconfigKey=ollama-api  ·  stream=false\n/api/tags /show /ps /generate /chat /embed" as REST #d5e8d4
+  }
+}
+
+node "Remote host  192.168.1.5:11434\nOLLAMA_HOST=0.0.0.0" as REMOTE #ffe6cc {
+  component "Ollama\nqwen3:30b" as OLLAMA #ffe6cc
+}
+
+Client --> MCP : MCP over HTTP\n(/mcp or /mcp/sse)
+MCP --> TOOL : tool call
+TOOL --> SVC
+SVC --> REST
+REST --> OLLAMA : HTTP JSON  --- LAN --->\n(read-timeout 120s)
+
+legend right
+  | <#dae8fc> | MCP transport / REST |
+  | <#e1d5e7> | Tools |
+  | <#d0e0e3> | Service |
+  | <#d5e8d4> | Ollama REST client |
+  | <#ffe6cc> | External — remote Ollama host |
+endlegend
+@enduml

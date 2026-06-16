@@ -1,0 +1,28 @@
+# Maven / build
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Quarkus
+.quarkus/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+nb-configuration.xml
+
+# OS
+.DS_Store
+
+# Claude Code local settings
+.claude/
+
+# Local env (copy .env.example -> .env)
+.env

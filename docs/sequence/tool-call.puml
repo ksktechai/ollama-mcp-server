@@ -1,0 +1,54 @@
+@startuml tool-call
+title <b>ollama-mcp-server — tool call sequence</b>
+
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam sequence {
+  ArrowColor #283593
+  ArrowThickness 1.4
+  LifeLineBorderColor #90A4AE
+  ParticipantBorderThickness 2
+}
+
+actor "MCP client\n(Postman)" as Client #ECEFF1
+participant "MCP HTTP transport\n/mcp · /mcp/sse" as MCP #dae8fc
+participant "OllamaTools\n@Tool" as Tools #e1d5e7
+participant "OllamaService" as Svc #d0e0e3
+participant "OllamaClient\n@RegisterRestClient" as Rest #d5e8d4
+participant "Remote Ollama\n192.168.1.5:11434\nqwen3:30b" as Ollama #ffe6cc
+
+Client -> MCP : tools/call  ollama_generate {prompt, model?}
+activate MCP
+MCP -> Tools : ollama_generate(prompt, model)
+activate Tools
+note right of Tools
+  @Logged interceptor:
+  >>> ollama_generate args=…
+  (UUID correlationId in MDC)
+end note
+Tools -> Svc : generate(prompt, model)
+activate Svc
+Svc -> Svc : resolveModel(model)\n→ ollama.default-model if blank
+Svc -> Rest : generate(GenerateRequest{stream=false})
+activate Rest
+Rest -> Ollama : POST /api/generate  (LAN, read-timeout 120s)
+activate Ollama
+Ollama --> Rest : 200 {response, done}
+deactivate Ollama
+Rest --> Svc : GenerateResponse
+deactivate Rest
+
+alt host down / timeout
+  Svc -> Svc : catch → {"error":"can't reach Ollama at <base-url>"}
+end
+
+Svc --> Tools : response text (or error JSON)
+deactivate Svc
+note right of Tools
+  <<< ollama_generate -> OK (NN ms)
+end note
+Tools --> MCP : text content
+deactivate Tools
+MCP --> Client : tools/call result
+deactivate MCP
+@enduml
