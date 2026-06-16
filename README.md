@@ -275,15 +275,24 @@ Copy-pasteable config snippets for each, all pointing at `/mcp` (Streamable HTTP
 ./mvnw verify
 ```
 
-Tests are **offline and deterministic** — they never call the real `192.168.1.5` host. The typed
-`OllamaClient` is replaced with a Mockito mock in the `%test` profile.
+Tests are **offline and deterministic** — they never call the real `192.168.1.5` host, and
+`./mvnw verify` enforces a **JaCoCo 90% line-coverage gate** (excluding the REST-client interface,
+DTO records and the `@Logged` annotation — data/no-logic). Current line coverage is ~91%.
 
-- **`McpToolsListTest`** — connects an in-process MCP client (`McpAssured.newConnectedSseClient()`)
-  and asserts all six tools are present with the expected names and argument schemas.
-- **`OllamaToolCallTest`** — drives the tools end-to-end with the client mocked: `ollama_generate`
-  returns the stubbed completion, `ollama_list` maps `/api/tags` into model names, malformed
-  `ollama_chat` input returns the readable error payload (not a 500), and a simulated connection
-  failure returns the `"can't reach <base-url>"` payload.
+Fast plain-JUnit unit tests carry the coverage (the logic-bearing classes), with `@QuarkusTest`
+tests for framework wiring:
+
+- **`OllamaServiceTest`** — Mockito-mocked client; covers default-model fallback, the defensive
+  `messagesJson`/`embed` parsing (both branches), and the "never 500 the caller" error payloads.
+- **`PostmanToolsTest`** — runs the full `run_postman_collection` flow against a **stub-newman**
+  script that emits a canned report, covering the Runner-style parsing, `analyze` (with a mocked
+  model), and the validation/launch-failure branches — no real Newman or API.
+- **`OllamaToolsTest`** / **`InvocationLoggingInterceptorTest`** — tool delegation and the
+  `>>> / <<<` logger (success/error, arg formatting, truncation).
+- **`McpToolsListTest`** (`@QuarkusTest`, McpAssured) — asserts all seven tools and their arg
+  schemas. **`OllamaToolCallTest`** (`@InjectMock`) — tools end-to-end with the client mocked.
+- **`OllamaClientWireMockTest`** (`@QuarkusTest` + WireMock) — exercises the **real** typed REST
+  client and DTO ↔ Ollama-JSON (de)serialisation over HTTP, offline.
 
 ---
 

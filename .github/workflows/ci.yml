@@ -32,3 +32,13 @@ jobs:
         with:
           name: surefire-reports
           path: target/surefire-reports/
+
+      # JaCoCo HTML coverage report (the 90% line gate runs as part of `verify`).
+      # Uploaded always so you can inspect coverage on pass or fail.
+      - name: Upload coverage report (JaCoCo)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-html-report
+          path: target/site/jacoco/
+          if-no-files-found: ignore
