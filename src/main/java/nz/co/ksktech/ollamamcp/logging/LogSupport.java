@@ -89,15 +89,6 @@ public final class LogSupport {
     return writer.truncated() ? writer + " …(truncated)" : writer.toString();
   }
 
-  /** Caps a String preview (for already-serialised bodies such as HTTP responses). */
-  public static String previewText(String body) {
-    int cap = maxBody();
-    if (cap <= 0 || body == null || body.isEmpty()) {
-      return "";
-    }
-    return body.length() <= cap ? body : body.substring(0, cap) + " …(truncated)";
-  }
-
   /**
    * A {@link Writer} that keeps at most {@code cap} characters and aborts serialisation (via {@link
    * Stop}) once full, so large payloads are never fully built just to be truncated.
