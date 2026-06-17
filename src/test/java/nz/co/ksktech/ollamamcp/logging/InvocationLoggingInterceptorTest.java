@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 /**
  * Unit tests for the {@code >>> / <<<} tool-invocation logger. We drive it with a hand-rolled
@@ -53,6 +54,21 @@ class InvocationLoggingInterceptorTest {
               throw boom;
             })))
         .isSameAs(boom);
+  }
+
+  @Test
+  void reusesExistingCorrelationId() throws Exception {
+    MDC.put(InvocationLoggingInterceptor.CORRELATION_ID, "pre-existing-id");
+    try {
+      Object result = interceptor.log(ctx(new Object[] {"short"}, () -> {
+        assertThat(MDC.get(InvocationLoggingInterceptor.CORRELATION_ID)).isEqualTo("pre-existing-id");
+        return "val";
+      }));
+      assertThat(result).isEqualTo("val");
+      assertThat(MDC.get(InvocationLoggingInterceptor.CORRELATION_ID)).isEqualTo("pre-existing-id");
+    } finally {
+      MDC.remove(InvocationLoggingInterceptor.CORRELATION_ID);
+    }
   }
 
   /** Minimal {@link InvocationContext} exposing only what the interceptor reads. */

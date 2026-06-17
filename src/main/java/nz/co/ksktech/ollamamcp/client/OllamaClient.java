@@ -16,7 +16,9 @@ import nz.co.ksktech.ollamamcp.client.dto.OllamaDtos.ListModelsResponse;
 import nz.co.ksktech.ollamamcp.client.dto.OllamaDtos.PsResponse;
 import nz.co.ksktech.ollamamcp.client.dto.OllamaDtos.ShowRequest;
 import nz.co.ksktech.ollamamcp.client.dto.OllamaDtos.ShowResponse;
+import org.eclipse.microprofile.rest.client.annotation.RegisterProvider;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
+import nz.co.ksktech.ollamamcp.logging.ExternalClientLoggingFilter;
 
 /**
  * Typed REST client for the (remote) Ollama HTTP API.
@@ -29,6 +31,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
  * {@code "stream": false} (see the DTO constructors) so each call returns one JSON object.
  */
 @RegisterRestClient(configKey = "ollama-api")
+@RegisterProvider(ExternalClientLoggingFilter.class)
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public interface OllamaClient {

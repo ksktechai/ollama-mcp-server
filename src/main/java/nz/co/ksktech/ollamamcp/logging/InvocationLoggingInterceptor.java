@@ -36,8 +36,12 @@ public class InvocationLoggingInterceptor {
 
   @AroundInvoke
   Object log(InvocationContext ctx) throws Exception {
-    String correlationId = UUID.randomUUID().toString();
-    MDC.put(CORRELATION_ID, correlationId);
+    String existingCorrelationId = MDC.get(CORRELATION_ID);
+    boolean generated = false;
+    if (existingCorrelationId == null || existingCorrelationId.isBlank()) {
+      MDC.put(CORRELATION_ID, UUID.randomUUID().toString());
+      generated = true;
+    }
     String tool = ctx.getMethod().getName();
     long start = System.nanoTime();
     Log.infof(">>> %s args=%s", tool, truncate(formatArgs(ctx.getParameters())));
@@ -45,13 +49,18 @@ public class InvocationLoggingInterceptor {
       Object result = ctx.proceed();
       long millis = (System.nanoTime() - start) / 1_000_000;
       Log.infof("<<< %s -> OK (%d ms)", tool, millis);
+      if (result != null) {
+        Log.infof("<<< tool response: %s", truncate(String.valueOf(result)));
+      }
       return result;
     } catch (Exception failure) {
       long millis = (System.nanoTime() - start) / 1_000_000;
       Log.errorf("<<< %s -> ERROR (%d ms): %s", tool, millis, failure.toString());
       throw failure;
     } finally {
-      MDC.remove(CORRELATION_ID);
+      if (generated) {
+        MDC.remove(CORRELATION_ID);
+      }
     }
   }
 
