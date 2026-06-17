@@ -49,8 +49,11 @@ public class InvocationLoggingInterceptor {
       correlationId = UUID.randomUUID().toString();
     }
     // Left on the MDC on purpose so the framework's response lines (MCP traffic "sent", access log)
-    // emitted on this worker thread after the tool returns also carry the id; CorrelationFilter
-    // clears it at request end (and the request-scope-first read above prevents cross-request bleed).
+    // emitted on this same worker thread after the tool returns also carry the id. The worker's MDC
+    // is not explicitly cleared (CorrelationFilter's end-handler runs on the event-loop), but the
+    // request-scope-first read above means a stale id on a pooled worker can never win for the next
+    // request. Note: a worker-dispatched bean that is NOT a @Tool would log under the prior id —
+    // there are none today; keep it that way or clear MDC here if that changes.
     MDC.put(CORRELATION_ID, correlationId);
     String tool = ctx.getMethod().getName();
     long start = System.nanoTime();
@@ -72,8 +75,9 @@ public class InvocationLoggingInterceptor {
 
   /**
    * The correlation id established at the HTTP entry (CorrelationFilter), recovered off the worker
-   * thread via the CDI request scope (RoutingContext) or the Vert.x duplicated context. Null when
-   * there is no active HTTP request (e.g. unit tests) so the caller generates one.
+   * thread via the CDI request scope ({@code CurrentVertxRequest} → RoutingContext), which Quarkus
+   * propagates across the event-loop → worker hop. Null when there is no active HTTP request (e.g.
+   * unit tests) so the caller generates one.
    */
   private String correlationIdFromContext() {
     try {
@@ -84,10 +88,9 @@ public class InvocationLoggingInterceptor {
         }
       }
     } catch (RuntimeException ignored) {
-      // no active request context on this thread — fall through
+      // no active request context on this thread — fall through to generate
     }
-    io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
-    return ctx == null ? null : ctx.getLocal(CORRELATION_ID);
+    return null;
   }
 
   private String formatArgs(Object[] args) {

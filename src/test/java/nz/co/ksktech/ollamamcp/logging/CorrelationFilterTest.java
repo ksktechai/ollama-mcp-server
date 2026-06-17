@@ -108,4 +108,17 @@ class CorrelationFilterTest {
     assertThat(MDC.get(CID)).isEqualTo("upstream-id");
     assertThat(store.get(CID)).isEqualTo("upstream-id");
   }
+
+  @Test
+  void rejectsMalformedInboundHeaderAndGeneratesFreshId() {
+    Handler<RoutingContext> handler = captureHandler();
+    Map<String, Object> store = new HashMap<>();
+    RoutingContext rc = mockRc("bad id with spaces", store); // spaces are not allowed
+
+    handler.handle(rc);
+
+    String id = (String) store.get(CID);
+    assertThat(id).isNotEqualTo("bad id with spaces");
+    assertThat(id).matches("[0-9a-f-]{36}"); // a freshly generated UUID
+  }
 }
