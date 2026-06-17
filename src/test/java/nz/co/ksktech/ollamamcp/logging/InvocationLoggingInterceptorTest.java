@@ -2,12 +2,15 @@ package nz.co.ksktech.ollamamcp.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import jakarta.interceptor.InvocationContext;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -25,6 +28,12 @@ class InvocationLoggingInterceptorTest {
   void setUp() {
     interceptor = new InvocationLoggingInterceptor();
     interceptor.maxBody = 5; // tiny, so long arg strings exercise the truncation branch
+    MDC.remove(InvocationLoggingInterceptor.CORRELATION_ID);
+  }
+
+  @AfterEach
+  void tearDown() {
+    MDC.remove(InvocationLoggingInterceptor.CORRELATION_ID);
   }
 
   @Test
@@ -69,6 +78,25 @@ class InvocationLoggingInterceptorTest {
     } finally {
       MDC.remove(InvocationLoggingInterceptor.CORRELATION_ID);
     }
+  }
+
+  @Test
+  void usesCorrelationIdFromRequestScope() throws Exception {
+    var currentRequest = mock(io.quarkus.vertx.http.runtime.CurrentVertxRequest.class);
+    var rc = mock(io.vertx.ext.web.RoutingContext.class);
+    when(currentRequest.getCurrent()).thenReturn(rc);
+    when(rc.get(InvocationLoggingInterceptor.CORRELATION_ID)).thenReturn("http-entry-id");
+    interceptor.currentVertxRequest = currentRequest;
+
+    String[] seen = new String[1];
+    interceptor.log(
+        ctx(
+            new Object[] {"x"},
+            () -> {
+              seen[0] = MDC.get(InvocationLoggingInterceptor.CORRELATION_ID);
+              return "ok";
+            }));
+    assertThat(seen[0]).isEqualTo("http-entry-id");
   }
 
   /** Minimal {@link InvocationContext} exposing only what the interceptor reads. */

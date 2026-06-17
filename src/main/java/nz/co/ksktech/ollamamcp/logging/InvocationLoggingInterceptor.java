@@ -34,14 +34,24 @@ public class InvocationLoggingInterceptor {
   @ConfigProperty(name = "app.logging.max-body", defaultValue = "2000")
   int maxBody;
 
+  @jakarta.inject.Inject io.quarkus.vertx.http.runtime.CurrentVertxRequest currentVertxRequest;
+
   @AroundInvoke
   Object log(InvocationContext ctx) throws Exception {
-    String existingCorrelationId = MDC.get(CORRELATION_ID);
-    boolean generated = false;
-    if (existingCorrelationId == null || existingCorrelationId.isBlank()) {
-      MDC.put(CORRELATION_ID, UUID.randomUUID().toString());
-      generated = true;
+    // Prefer the id established at the HTTP entry (CorrelationFilter), recovered off the worker
+    // thread via the CDI request scope; else this thread's MDC; else generate. Reading the request
+    // scope FIRST means a stale id left on a pooled worker thread can never win.
+    String correlationId = correlationIdFromContext();
+    if (correlationId == null || correlationId.isBlank()) {
+      correlationId = MDC.get(CORRELATION_ID);
     }
+    if (correlationId == null || correlationId.isBlank()) {
+      correlationId = UUID.randomUUID().toString();
+    }
+    // Left on the MDC on purpose so the framework's response lines (MCP traffic "sent", access log)
+    // emitted on this worker thread after the tool returns also carry the id; CorrelationFilter
+    // clears it at request end (and the request-scope-first read above prevents cross-request bleed).
+    MDC.put(CORRELATION_ID, correlationId);
     String tool = ctx.getMethod().getName();
     long start = System.nanoTime();
     Log.infof(">>> %s args=%s", tool, truncate(formatArgs(ctx.getParameters())));
@@ -57,11 +67,27 @@ public class InvocationLoggingInterceptor {
       long millis = (System.nanoTime() - start) / 1_000_000;
       Log.errorf("<<< %s -> ERROR (%d ms): %s", tool, millis, failure.toString());
       throw failure;
-    } finally {
-      if (generated) {
-        MDC.remove(CORRELATION_ID);
-      }
     }
+  }
+
+  /**
+   * The correlation id established at the HTTP entry (CorrelationFilter), recovered off the worker
+   * thread via the CDI request scope (RoutingContext) or the Vert.x duplicated context. Null when
+   * there is no active HTTP request (e.g. unit tests) so the caller generates one.
+   */
+  private String correlationIdFromContext() {
+    try {
+      if (currentVertxRequest != null && currentVertxRequest.getCurrent() != null) {
+        Object fromRequest = currentVertxRequest.getCurrent().get(CORRELATION_ID);
+        if (fromRequest != null) {
+          return fromRequest.toString();
+        }
+      }
+    } catch (RuntimeException ignored) {
+      // no active request context on this thread — fall through
+    }
+    io.vertx.core.Context ctx = io.vertx.core.Vertx.currentContext();
+    return ctx == null ? null : ctx.getLocal(CORRELATION_ID);
   }
 
   private String formatArgs(Object[] args) {
